@@ -37,6 +37,9 @@ enum iio_chan_info_enum {
 	IIO_CHAN_INFO_HARDWAREGAIN,
 	IIO_CHAN_INFO_HYSTERESIS,
 	IIO_CHAN_INFO_INT_TIME,
+#ifdef CONFIG_MACH_COMMA
+	IIO_CHAN_INFO_OVERSAMPLING_RATIO,
+#endif
 };
 
 enum iio_shared_by {
@@ -277,7 +280,11 @@ static inline bool iio_channel_has_info(const struct iio_chan_spec *chan,
  **/
 static inline s64 iio_get_time_ns(void)
 {
+#ifdef CONFIG_MACH_COMMA
+	return ktime_get_boot_ns();
+#else
 	return ktime_get_real_ns();
+#endif
 }
 
 /* Device operating modes */

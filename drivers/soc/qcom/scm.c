@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -43,7 +43,7 @@ static DEFINE_MUTEX(scm_lock);
 DEFINE_MUTEX(scm_lmh_lock);
 
 #define SCM_EBUSY_WAIT_MS 30
-#define SCM_EBUSY_MAX_RETRY 20
+#define SCM_EBUSY_MAX_RETRY 67
 
 #define N_EXT_SCM_ARGS 7
 #define FIRST_EXT_ARG_IDX 3
@@ -330,6 +330,8 @@ static int _scm_call_retry(u32 svc_id, u32 cmd_id, const void *cmd_buf,
 					resp_buf, resp_len, cmd, len);
 		if (ret == SCM_EBUSY)
 			msleep(SCM_EBUSY_WAIT_MS);
+		if (retry_count == 33)
+			pr_warn("scm: secure world has been busy for 1 second!\n");
 	} while (ret == SCM_EBUSY && (retry_count++ < SCM_EBUSY_MAX_RETRY));
 
 	if (ret == SCM_EBUSY)
@@ -657,10 +659,6 @@ int scm_call2(u32 fn_id, struct scm_desc *desc)
 
 		desc->ret[0] = desc->ret[1] = desc->ret[2] = 0;
 
-		pr_debug("scm_call: func id %#llx, args: %#x, %#llx, %#llx, %#llx, %#llx\n",
-			x0, desc->arginfo, desc->args[0], desc->args[1],
-			desc->args[2], desc->x5);
-
 		if (scm_version == SCM_ARMV8_64)
 			ret = __scm_call_armv8_64(x0, desc->arginfo,
 						  desc->args[0], desc->args[1],
@@ -681,13 +679,13 @@ int scm_call2(u32 fn_id, struct scm_desc *desc)
 
 		if (ret == SCM_V2_EBUSY)
 			msleep(SCM_EBUSY_WAIT_MS);
+		if (retry_count == 33)
+			pr_warn("scm: secure world has been busy for 1 second!\n");
 	}  while (ret == SCM_V2_EBUSY && (retry_count++ < SCM_EBUSY_MAX_RETRY));
 
 	if (ret < 0)
-		pr_err("scm_call failed: func id %#llx, arginfo: %#x, args: %#llx, %#llx, %#llx, %#llx, ret: %d, syscall returns: %#llx, %#llx, %#llx\n",
-			x0, desc->arginfo, desc->args[0], desc->args[1],
-			desc->args[2], desc->x5, ret, desc->ret[0],
-			desc->ret[1], desc->ret[2]);
+		pr_err("scm_call failed: func id %#llx, ret: %d, syscall returns: %#llx, %#llx, %#llx\n",
+			x0, ret, desc->ret[0], desc->ret[1], desc->ret[2]);
 
 	if (arglen > N_REGISTER_ARGS)
 		kfree(desc->extra_arg_buf);

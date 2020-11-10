@@ -1,5 +1,4 @@
 /* Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
- * Copyright (C) 2016 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -26,6 +25,7 @@
 #include <linux/delay.h>
 #include <linux/qpnp/power-on.h>
 #include <linux/of_address.h>
+#include <linux/comma_board.h>
 
 #include <asm/cacheflush.h>
 #include <asm/system_misc.h>
@@ -60,7 +60,7 @@ static void scm_disable_sdi(void);
  * There is no API from TZ to re-enable the registers.
  * So the SDI cannot be re-enabled when it already by-passed.
 */
-static int download_mode = 1;
+static int download_mode = !IS_ENABLED(CONFIG_MACH_COMMA);
 static struct kobject dload_kobj;
 
 #ifdef CONFIG_MSM_DLOAD_MODE
@@ -263,18 +263,24 @@ static void msm_restart_prepare(const char *cmd)
 				(cmd != NULL && cmd[0] != '\0'));
 	}
 
+#ifdef CONFIG_MACH_COMMA
+	/* To preserve console-ramoops */
+	need_warm_reset = true;
+#endif
+
 	/* Hard reset the PMIC unless memory contents must be maintained. */
 	if (need_warm_reset) {
 		qpnp_pon_system_pwr_off(PON_POWER_OFF_WARM_RESET);
 	} else {
 		qpnp_pon_system_pwr_off(PON_POWER_OFF_HARD_RESET);
 	}
-	if (in_panic) {
-		qpnp_pon_system_pwr_off(PON_POWER_OFF_WARM_RESET);
-		qpnp_pon_set_restart_reason(
-			PON_RESTART_REASON_PANIC);
-		__raw_writel(0x77665508, restart_reason);
-	} else if (cmd != NULL) {
+#ifdef CONFIG_MACH_COMMA
+		if (comma_board_id() == COMMA_BOARD_GEMINI)
+			qpnp_pon_set_restart_reason(PON_RESTART_REASON_REBOOT);
+		__raw_writel(0x77665501, restart_reason);
+	} else
+#endif
+	if (cmd != NULL) {
 		if (!strncmp(cmd, "bootloader", 10)) {
 			qpnp_pon_set_restart_reason(
 				PON_RESTART_REASON_BOOTLOADER);
@@ -307,8 +313,10 @@ static void msm_restart_prepare(const char *cmd)
 				__raw_writel(0x6f656d00 | (code & 0xff),
 					     restart_reason);
 		} else {
-			qpnp_pon_set_restart_reason(
-				PON_RESTART_REASON_NORMAL);
+#ifdef CONFIG_MACH_COMMA
+			if (comma_board_id() == COMMA_BOARD_GEMINI)
+				qpnp_pon_set_restart_reason(PON_RESTART_REASON_REBOOT);
+#endif
 			__raw_writel(0x77665501, restart_reason);
 		}
 	} else {

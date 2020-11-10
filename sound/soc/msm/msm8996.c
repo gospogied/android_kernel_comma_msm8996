@@ -1,6 +1,5 @@
 /*
  * Copyright (c) 2014-2016, The Linux Foundation. All rights reserved.
- * Copyright (C) 2016 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -23,6 +22,7 @@
 #include <linux/module.h>
 #include <linux/switch.h>
 #include <linux/input.h>
+#include <linux/comma_board.h>
 #include <sound/core.h>
 #include <sound/soc.h>
 #include <sound/soc-dapm.h>
@@ -37,7 +37,9 @@
 #include "../codecs/wcd9xxx-common.h"
 #include "../codecs/wcd9330.h"
 #include "../codecs/wcd9335.h"
+#ifdef WSA881X_PA
 #include "../codecs/wsa881x.h"
+#endif
 
 #define DRV_NAME "msm8996-asoc-snd"
 
@@ -58,8 +60,14 @@
 #define ADSP_STATE_READY_TIMEOUT_MS    3000
 #define DEV_NAME_STR_LEN            32
 
+#ifdef WSA881X_PA
 #define WSA8810_NAME_1 "wsa881x.20170211"
 #define WSA8810_NAME_2 "wsa881x.20170212"
+#endif
+
+#ifdef CONFIG_MACH_COMMA
+extern int max98927_get_i2c_states(void);
+#endif
 
 static int slim0_rx_sample_rate = SAMPLING_RATE_48KHZ;
 static int slim0_tx_sample_rate = SAMPLING_RATE_48KHZ;
@@ -124,6 +132,7 @@ static const struct soc_enum msm8996_auxpcm_enum[] = {
 		SOC_ENUM_SINGLE_EXT(2, auxpcm_rate_text),
 };
 
+#ifndef CONFIG_MACH_COMMA
 static struct afe_clk_set mi2s_tx_clk = {
 	AFE_API_VERSION_I2S_CONFIG,
 	Q6AFE_LPASS_CLK_ID_TER_MI2S_IBIT,
@@ -132,6 +141,7 @@ static struct afe_clk_set mi2s_tx_clk = {
 	Q6AFE_LPASS_CLK_ROOT_DEFAULT,
 	0,
 };
+#else
 
 static int pri_mi2s_sample_rate = SAMPLING_RATE_48KHZ;
 static int sec_mi2s_sample_rate = SAMPLING_RATE_48KHZ;
@@ -276,7 +286,135 @@ static const char *const quat_mi2s_rx_ch_text[] = {"One", "Two", "Three", "Four"
 						   "Five", "Six", "Seven",
 						   "Eight"};
 
+static void param_set_mask(struct snd_pcm_hw_params *p, int n, unsigned bit);
 
+static int msm_pri_mi2s_rx_ch_get(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	pr_debug("%s: msm_pri_mi2s_rx_ch  = %d\n", __func__,
+		 msm_pri_mi2s_rx_ch);
+	ucontrol->value.integer.value[0] = msm_pri_mi2s_rx_ch - 1;
+	return 0;
+}
+
+static int msm_pri_mi2s_rx_ch_put(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	msm_pri_mi2s_rx_ch = ucontrol->value.integer.value[0] + 1;
+	pr_debug("%s: msm_pri_mi2s_rx_ch = %d\n", __func__,
+		 msm_pri_mi2s_rx_ch);
+	return 1;
+}
+
+static int msm_sec_mi2s_rx_ch_get(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	pr_debug("%s: msm_sec_mi2s_rx_ch  = %d\n", __func__,
+		 msm_sec_mi2s_rx_ch);
+	ucontrol->value.integer.value[0] = msm_sec_mi2s_rx_ch - 1;
+	return 0;
+}
+
+static int msm_sec_mi2s_rx_ch_put(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	msm_sec_mi2s_rx_ch = ucontrol->value.integer.value[0] + 1;
+	pr_debug("%s: msm_sec_mi2s_rx_ch = %d\n", __func__,
+		 msm_sec_mi2s_rx_ch);
+	return 1;
+}
+
+static int msm_tert_mi2s_rx_ch_get(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	pr_debug("%s: msm_tert_mi2s_rx_ch  = %d\n", __func__,
+		 msm_tert_mi2s_rx_ch);
+	ucontrol->value.integer.value[0] = msm_tert_mi2s_rx_ch - 1;
+	return 0;
+}
+
+static int msm_tert_mi2s_rx_ch_put(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	msm_tert_mi2s_rx_ch = ucontrol->value.integer.value[0] + 1;
+	pr_debug("%s: msm_tert_mi2s_rx_ch = %d\n", __func__,
+		 msm_tert_mi2s_rx_ch);
+	return 1;
+}
+
+static int msm_quat_mi2s_rx_ch_get(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	pr_debug("%s: msm_quat_mi2s_rx_ch  = %d\n", __func__,
+		 msm_quat_mi2s_rx_ch);
+	ucontrol->value.integer.value[0] = msm_quat_mi2s_rx_ch - 1;
+	return 0;
+}
+
+static int msm_quat_mi2s_rx_ch_put(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	msm_quat_mi2s_rx_ch = ucontrol->value.integer.value[0] + 1;
+	pr_debug("%s: msm_quat_mi2s_rx_ch = %d\n", __func__,
+		 msm_quat_mi2s_rx_ch);
+	return 1;
+}
+
+static int msm_pri_mi2s_tx_ch_get(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	pr_debug("%s: msm_pri_mi2s_tx_ch  = %d\n", __func__,
+		 msm_pri_mi2s_tx_ch);
+	ucontrol->value.integer.value[0] = msm_pri_mi2s_tx_ch - 1;
+	return 0;
+}
+
+static int msm_pri_mi2s_tx_ch_put(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	msm_pri_mi2s_tx_ch = ucontrol->value.integer.value[0] + 1;
+	pr_debug("%s: msm_pri_mi2s_tx_ch = %d\n", __func__,
+		 msm_pri_mi2s_tx_ch);
+	return 1;
+}
+
+static int msm_sec_mi2s_tx_ch_get(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	pr_debug("%s: msm_sec_mi2s_tx_ch  = %d\n", __func__,
+		 msm_sec_mi2s_tx_ch);
+	ucontrol->value.integer.value[0] = msm_sec_mi2s_tx_ch - 1;
+	return 0;
+}
+
+static int msm_sec_mi2s_tx_ch_put(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	msm_sec_mi2s_tx_ch = ucontrol->value.integer.value[0] + 1;
+	pr_debug("%s: msm_sec_mi2s_tx_ch = %d\n", __func__,
+		 msm_sec_mi2s_tx_ch);
+	return 1;
+}
+
+static int msm_tert_mi2s_tx_ch_get(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	pr_debug("%s: msm_tert_mi2s_tx_ch  = %d\n", __func__,
+		 msm_tert_mi2s_tx_ch);
+	ucontrol->value.integer.value[0] = msm_tert_mi2s_tx_ch - 1;
+	return 0;
+}
+
+static int msm_tert_mi2s_tx_ch_put(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	msm_tert_mi2s_tx_ch = ucontrol->value.integer.value[0] + 1;
+	pr_debug("%s: msm_tert_mi2s_tx_ch = %d\n", __func__,
+		 msm_tert_mi2s_tx_ch);
+	return 1;
+}
+
+#ifdef WSA881X_PA
 struct msm8996_wsa881x_dev_info {
 	struct device_node *of_node;
 	u32 index;
@@ -284,6 +422,7 @@ struct msm8996_wsa881x_dev_info {
 
 static struct snd_soc_aux_dev *msm8996_aux_dev;
 static struct snd_soc_codec_conf *msm8996_codec_conf;
+#endif
 
 struct msm8996_asoc_mach_data {
 	u32 mclk_freq;
@@ -314,7 +453,9 @@ static void *adsp_state_notifier;
 static void *def_tasha_mbhc_cal(void);
 static int msm_snd_enable_codec_ext_clk(struct snd_soc_codec *codec,
 					int enable, bool dapm);
+#ifdef WSA881X_PA
 static int msm8996_wsa881x_init(struct snd_soc_component *component);
+#endif
 
 /*
  * Need to report LINEIN
@@ -497,7 +638,7 @@ static int msm8996_get_spk(struct snd_kcontrol *kcontrol,
 static int msm8996_set_spk(struct snd_kcontrol *kcontrol,
 			      struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
+	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
 
 	pr_debug("%s() ucontrol->value.integer.value[0] = %ld\n",
 		 __func__, ucontrol->value.integer.value[0]);
@@ -1830,6 +1971,7 @@ static int msm_proxy_tx_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 	return 0;
 }
 
+#ifdef CONFIG_SND_SOC_MSM_HDMI_CODEC_RX
 static int msm8996_hdmi_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 					      struct snd_pcm_hw_params *params)
 {
@@ -1850,6 +1992,7 @@ static int msm8996_hdmi_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 
 	return 0;
 }
+#endif
 
 
 static int legacy_msm8996_mi2s_snd_startup(struct snd_pcm_substream *substream)
@@ -1893,6 +2036,7 @@ static struct snd_soc_ops legacy_msm8996_mi2s_be_ops = {
 	.startup = legacy_msm8996_mi2s_snd_startup,
 	.shutdown = legacy_msm8996_mi2s_snd_shutdown,
 };
+#endif
 
 static int msm_slim_5_rx_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 					    struct snd_pcm_hw_params *params)
@@ -2530,6 +2674,7 @@ static const struct snd_kcontrol_new msm_snd_controls[] = {
 			msm8996_hifi_put),
 	SOC_ENUM_EXT("VI_FEED_TX Channels", msm_snd_enum[12],
 			msm_vi_feed_tx_ch_get, msm_vi_feed_tx_ch_put),
+#ifdef CONFIG_MACH_COMMA
 	SOC_ENUM_EXT("PRI_MI2S BitWidth", msm8996_mi2s_snd_enum[0],
 			pri_mi2s_bit_format_get, pri_mi2s_bit_format_put),
 	SOC_ENUM_EXT("SEC_MI2S BitWidth", msm8996_mi2s_snd_enum[0],
@@ -2562,6 +2707,7 @@ static const struct snd_kcontrol_new msm_snd_controls[] = {
 			msm_quat_mi2s_rx_ch_get, msm_quat_mi2s_rx_ch_put),
 	SOC_ENUM_EXT("QUAT_MI2S_TX Channels", msm8996_mi2s_snd_enum[9],
 			msm_quat_mi2s_tx_ch_get, msm_quat_mi2s_tx_ch_put),
+#endif
 };
 
 static bool msm8996_swap_gnd_mic(struct snd_soc_codec *codec)
@@ -2723,7 +2869,9 @@ static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 	struct snd_soc_dapm_context *dapm = &codec->dapm;
 	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
 	struct snd_soc_dai *codec_dai = rtd->codec_dai;
+#ifdef WSA881X_PA
 	struct snd_soc_pcm_runtime *rtd_aux = rtd->card->rtd_aux;
+#endif
 	void *mbhc_calibration;
 	struct snd_card *card;
 	struct snd_info_entry *entry;
@@ -2900,6 +3048,7 @@ static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 
 	tasha_event_register(msm8996_tasha_codec_event_cb, rtd->codec);
 
+#ifdef WSA881X_PA
 	/*
 	 * Send speaker configuration only for WSA8810.
 	 * Defalut configuration is for WSA8815.
@@ -2911,6 +3060,8 @@ static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 			tasha_set_spkr_gain_offset(rtd->codec,
 						   RX_GAIN_OFFSET_M1P5_DB);
 	}
+#endif
+
 	codec_reg_done = true;
 
 	card = rtd->card->snd_card;
@@ -3883,6 +4034,7 @@ static struct snd_soc_dai_link msm8996_common_dai_links[] = {
 		.codec_name = "snd-soc-dummy",
 		.be_id = MSM_FRONTEND_DAI_VOICE2,
 	},
+#ifdef CONFIG_MACH_COMMA
 	{
 		.name = "Primary MI2S RX_Hostless",
 		.stream_name = "Primary MI2S_RX Hostless Playback",
@@ -3988,6 +4140,7 @@ static struct snd_soc_dai_link msm8996_common_dai_links[] = {
 		.codec_dai_name = "snd-soc-dummy-dai",
 		.codec_name = "snd-soc-dummy",
 	},
+#endif
 };
 
 static struct snd_soc_dai_link msm8996_tasha_fe_dai_links[] = {
@@ -4177,6 +4330,64 @@ static struct snd_soc_dai_link msm8996_common_be_dai_links[] = {
 		.be_hw_params_fixup = msm_be_hw_params_fixup,
 		.ignore_suspend = 1,
 	},
+#ifdef CONFIG_MACH_COMMA
+	{
+		.name = LPASS_BE_TERT_MI2S_RX,
+		.stream_name = "Tertiary MI2S Playback",
+		.cpu_dai_name = "msm-dai-q6-mi2s.2",
+		.platform_name = "msm-pcm-routing",
+		.codec_name = "msm-stub-codec.1",
+		.codec_dai_name = "msm-stub-rx",
+		.no_pcm = 1,
+		.dpcm_playback = 1,
+		.be_id = MSM_BACKEND_DAI_TERTIARY_MI2S_RX,
+		.be_hw_params_fixup = msm_tert_mi2s_rx_be_hw_params_fixup,
+		.ops = &msm8996_tert_mi2s_be_ops,
+		.ignore_suspend = 1,
+	},
+	{
+		.name = LPASS_BE_TERT_MI2S_TX,
+		.stream_name = "Tertiary MI2S Capture",
+		.cpu_dai_name = "msm-dai-q6-mi2s.2",
+		.platform_name = "msm-pcm-routing",
+		.codec_name = "msm-stub-codec.1",
+		.codec_dai_name = "msm-stub-tx",
+		.no_pcm = 1,
+		.dpcm_capture = 1,
+		.be_id = MSM_BACKEND_DAI_TERTIARY_MI2S_TX,
+		.be_hw_params_fixup = msm_tert_mi2s_tx_be_hw_params_fixup,
+		.ops = &msm8996_tert_mi2s_be_ops,
+		.ignore_suspend = 1,
+	},
+	{
+		.name = LPASS_BE_QUAT_MI2S_RX,
+		.stream_name = "Quaternary MI2S Playback",
+		.cpu_dai_name = "msm-dai-q6-mi2s.3",
+		.platform_name = "msm-pcm-routing",
+		.codec_name = "msm-stub-codec.1",
+		.codec_dai_name = "msm-stub-rx",
+		.no_pcm = 1,
+		.dpcm_playback = 1,
+		.be_id = MSM_BACKEND_DAI_QUATERNARY_MI2S_RX,
+		.be_hw_params_fixup = msm_quat_mi2s_rx_be_hw_params_fixup,
+		.ops = &msm8996_quat_mi2s_be_ops,
+		.ignore_suspend = 1,
+	},
+	{
+		.name = LPASS_BE_QUAT_MI2S_TX,
+		.stream_name = "Quaternary MI2S Capture",
+		.cpu_dai_name = "msm-dai-q6-mi2s.3",
+		.platform_name = "msm-pcm-routing",
+		.codec_name = "msm-stub-codec.1",
+		.codec_dai_name = "msm-stub-tx",
+		.no_pcm = 1,
+		.dpcm_capture = 1,
+		.be_id = MSM_BACKEND_DAI_QUATERNARY_MI2S_TX,
+		.be_hw_params_fixup = msm_quat_mi2s_tx_be_hw_params_fixup,
+		.ops = &msm8996_quat_mi2s_be_ops,
+		.ignore_suspend = 1,
+	},
+#else
 	{
 		.name = LPASS_BE_TERT_MI2S_TX,
 		.stream_name = "Tertiary MI2S Capture",
@@ -4290,8 +4501,41 @@ static struct snd_soc_dai_link msm8996_common_be_dai_links[] = {
 		.be_hw_params_fixup = msm_quat_mi2s_tx_be_hw_params_fixup,
 		.ops = &msm8996_quat_mi2s_be_ops,
 		.ignore_suspend = 1,
-	}
+#endif
 };
+
+#ifdef CONFIG_MACH_COMMA
+static struct snd_soc_dai_link leeco_be_dai_links[] = {
+	{
+		.name = LPASS_BE_PRI_MI2S_RX,
+		.stream_name = "Primary MI2S Playback",
+		.cpu_dai_name = "msm-dai-q6-mi2s.0",
+		.platform_name = "msm-pcm-routing",
+		.codec_name = "msm-stub-codec.1",
+		.codec_dai_name = "msm-stub-rx",
+		.no_pcm = 1,
+		.dpcm_playback = 1,
+		.be_id = MSM_BACKEND_DAI_PRI_MI2S_RX,
+		.be_hw_params_fixup = msm_pri_mi2s_rx_be_hw_params_fixup,
+		.ops = &msm8996_pri_mi2s_be_ops,
+		.ignore_suspend = 1,
+	},
+	{
+		.name = LPASS_BE_PRI_MI2S_TX,
+		.stream_name = "Primary MI2S Capture",
+		.cpu_dai_name = "msm-dai-q6-mi2s.0",
+		.platform_name = "msm-pcm-routing",
+		.codec_name = "msm-stub-codec.1",
+		.codec_dai_name = "msm-stub-tx",
+		.no_pcm = 1,
+		.dpcm_capture = 1,
+		.be_id = MSM_BACKEND_DAI_PRI_MI2S_TX,
+		.be_hw_params_fixup = msm_pri_mi2s_tx_be_hw_params_fixup,
+		.ops = &msm8996_pri_mi2s_be_ops,
+		.ignore_suspend = 1,
+	},
+};
+#endif
 
 static struct snd_soc_dai_link msm8996_tasha_be_dai_links[] = {
 	/* Backend DAI Links */
@@ -4452,6 +4696,7 @@ static struct snd_soc_dai_link msm8996_tasha_be_dai_links[] = {
 };
 
 static struct snd_soc_dai_link msm8996_hdmi_dai_link[] = {
+#ifdef CONFIG_SND_SOC_MSM_HDMI_CODEC_RX
 	/* HDMI BACK END DAI Link */
 	{
 		.name = LPASS_BE_HDMI,
@@ -4467,15 +4712,20 @@ static struct snd_soc_dai_link msm8996_hdmi_dai_link[] = {
 		.ignore_pmdown_time = 1,
 		.ignore_suspend = 1,
 	},
+#endif
 };
 
 static struct snd_soc_dai_link msm8996_tasha_dai_links[
+#ifdef CONFIG_MACH_COMMA
+			 ARRAY_SIZE(leeco_be_dai_links) +
+#endif
 			 ARRAY_SIZE(msm8996_common_dai_links) +
 			 ARRAY_SIZE(msm8996_tasha_fe_dai_links) +
 			 ARRAY_SIZE(msm8996_common_be_dai_links) +
 			 ARRAY_SIZE(msm8996_tasha_be_dai_links) +
 			 ARRAY_SIZE(msm8996_hdmi_dai_link)];
 
+#ifdef WSA881X_PA
 static int msm8996_wsa881x_init(struct snd_soc_component *component)
 {
 	u8 spkleft_ports[WSA881X_MAX_SWR_PORTS] = {100, 101, 102, 106};
@@ -4525,10 +4775,15 @@ static int msm8996_wsa881x_init(struct snd_soc_component *component)
 
 	return 0;
 }
+#endif
 
 struct snd_soc_card snd_soc_card_tasha_msm8996 = {
 	.name		= "msm8996-tasha-snd-card",
 };
+
+#ifdef CONFIG_MACH_COMMA
+extern struct device_node *tfa_codec_np;
+#endif
 
 static int msm8996_populate_dai_link_component_of_node(
 					struct snd_soc_card *card)
@@ -4591,6 +4846,16 @@ static int msm8996_populate_dai_link_component_of_node(
 				dai_link[i].cpu_dai_name = NULL;
 			}
 		}
+
+#ifdef CONFIG_MACH_COMMA
+		if (comma_board_id() == COMMA_BOARD_ONEPLUS &&
+			!strcmp(dai_link[i].stream_name, "Quaternary MI2S Playback")) {
+			dai_link[i].codec_name = NULL;
+			dai_link[i].codec_dai_name = "tfa98xx_codec";
+			dai_link[i].codec_of_node = tfa_codec_np;
+			continue;
+		}
+#endif
 
 		/* populate codec_of_node for snd card dai links */
 		if (dai_link[i].codec_name && !dai_link[i].codec_of_node) {
@@ -4722,6 +4987,26 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 		dev_dbg(dev, "%s(): No hdmi audio support\n", __func__);
 	}
 
+#ifdef CONFIG_MACH_COMMA
+	if (comma_board_id() == COMMA_BOARD_LEECO) {
+		int i;
+
+		for (i = 0; i < len_4; i++) {
+			const char *stream = dailink[i].stream_name;
+
+			if (!strcmp(stream, "Tertiary MI2S Playback") ||
+				!strcmp(stream, "Tertiary MI2S Capture")) {
+				dailink[i].codec_name = "max98927.9-003a";
+				dailink[i].codec_dai_name = "max98927-aif1";
+			}
+		}
+
+		memcpy(dailink + len_4, leeco_be_dai_links,
+			sizeof(leeco_be_dai_links));
+		len_4 += ARRAY_SIZE(leeco_be_dai_links);
+	}
+#endif
+
 	if (card) {
 		card->dai_link = dailink;
 		card->num_links = len_4;
@@ -4730,6 +5015,7 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 	return card;
 }
 
+#ifdef WSA881X_PA
 static int msm8996_init_wsa_dev(struct platform_device *pdev,
 				struct snd_soc_card *card)
 {
@@ -4891,6 +5177,8 @@ static int msm8996_init_wsa_dev(struct platform_device *pdev,
 
 	return 0;
 }
+#endif
+
 static int msm8996_asoc_machine_probe(struct platform_device *pdev)
 {
 	struct snd_soc_card *card;
@@ -4899,6 +5187,11 @@ static int msm8996_asoc_machine_probe(struct platform_device *pdev)
 	char *mclk_freq_prop_name;
 	const struct of_device_id *match;
 	int ret;
+
+#ifdef CONFIG_MACH_COMMA
+	if (comma_board_id() == COMMA_BOARD_ONEPLUS)
+		msm_quat_mi2s_rx_ch = 2;
+#endif
 
 	if (!pdev->dev.of_node) {
 		dev_err(&pdev->dev, "No platform supplied from device tree\n");
@@ -4976,9 +5269,11 @@ static int msm8996_asoc_machine_probe(struct platform_device *pdev)
 		goto err;
 	}
 
+#ifdef WSA881X_PA
 	ret = msm8996_init_wsa_dev(pdev, card);
 	if (ret)
 		goto err;
+#endif
 
 	pdata->hph_en1_gpio = of_get_named_gpio(pdev->dev.of_node,
 						"qcom,hph-en1-gpio", 0);

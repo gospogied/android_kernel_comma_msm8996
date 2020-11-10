@@ -1,5 +1,4 @@
 /* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
- * Copyright (C) 2016 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -59,6 +58,9 @@ enum pon_restart_reason {
 	PON_RESTART_REASON_DMVERITY_CORRUPTED	= 0x04,
 	PON_RESTART_REASON_DMVERITY_ENFORCE	= 0x05,
 	PON_RESTART_REASON_KEYS_CLEAR		= 0x06,
+#ifdef CONFIG_MACH_COMMA
+	PON_RESTART_REASON_REBOOT		= 0x10,
+#endif
 	PON_RESTART_REASON_NORMAL               = 0x20,
 	PON_RESTART_REASON_PANIC                = 0x21,
 };

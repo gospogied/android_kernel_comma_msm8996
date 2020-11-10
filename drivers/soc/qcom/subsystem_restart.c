@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -259,7 +259,8 @@ static ssize_t firmware_name_store(struct device *dev,
 
 	pr_info("Changing subsys fw_name to %s\n", buf);
 	mutex_lock(&track->lock);
-	strlcpy(subsys->desc->fw_name, buf, count + 1);
+	strlcpy(subsys->desc->fw_name, buf,
+			min(count + 1, sizeof(subsys->desc->fw_name)));
 	mutex_unlock(&track->lock);
 	return orig_count;
 }
@@ -648,7 +649,11 @@ static void subsystem_powerup(struct subsys_device *dev, void *data)
 static int __find_subsys(struct device *dev, void *data)
 {
 	struct subsys_device *subsys = to_subsys(dev);
+#ifdef CONFIG_MACH_COMMA
+	return !!strstr(subsys->desc->name, data);
+#else
 	return !strcmp(subsys->desc->name, data);
+#endif
 }
 
 static struct subsys_device *find_subsys(const char *str)
@@ -996,8 +1001,9 @@ int subsystem_restart_dev(struct subsys_device *dev)
 	pr_info("Restart sequence requested for %s, restart_level = %s.\n",
 		name, restart_levels[dev->restart_level]);
 
-	if (WARN(disable_restart_work == DISABLE_SSR,
-		"subsys-restart: Ignoring restart request for %s.\n", name)) {
+	if (disable_restart_work == DISABLE_SSR) {
+		pr_warn("subsys-restart: Ignoring restart request for %s.\n",
+									name);
 		return 0;
 	}
 

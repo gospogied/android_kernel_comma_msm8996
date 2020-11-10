@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -35,6 +35,7 @@
 #include <linux/string_helpers.h>
 #include <linux/alarmtimer.h>
 #include <linux/qpnp/qpnp-revid.h>
+#include <linux/comma_board.h>
 
 /* Register offsets */
 
@@ -329,7 +330,11 @@ module_param_named(
 	battery_type, fg_batt_type, charp, S_IRUSR | S_IWUSR
 );
 
+#ifdef CONFIG_MACH_COMMA
+static int fg_sram_update_period_ms = 1000;
+#else
 static int fg_sram_update_period_ms = 30000;
+#endif
 module_param_named(
 	sram_update_period_ms, fg_sram_update_period_ms, int, S_IRUSR | S_IWUSR
 );
@@ -607,6 +612,9 @@ struct fg_chip {
 	struct delayed_work	check_sanity_work;
 	struct fg_wakeup_source	sanity_wakeup_source;
 	u8			last_beat_count;
+#ifdef CONFIG_MACH_COMMA
+	struct power_supply	*bq_psy;
+#endif
 };
 
 /* FG_MEMIF DEBUGFS structures */
@@ -638,6 +646,7 @@ struct fg_trans {
 	struct fg_chip *chip;
 	struct fg_log_buffer *log; /* log buffer */
 	u8 *data;	/* fg data that is read */
+	struct mutex memif_dfs_lock; /* Prevent thread concurrency */
 };
 
 struct fg_dbgfs {
@@ -3103,9 +3112,7 @@ static int estimate_battery_age(struct fg_chip *chip, int *actual_capacity)
 	}
 
 	battery_soc = get_battery_soc_raw(chip) * 100 / FULL_PERCENT_3B;
-	if (rc) {
-		goto error_done;
-	} else if (battery_soc < 25 || battery_soc > 75) {
+	if (battery_soc < 25 || battery_soc > 75) {
 		if (fg_debug_mask & FG_AGING)
 			pr_info("Battery SoC (%d) out of range, aborting\n",
 					(int)battery_soc);
@@ -3216,12 +3223,52 @@ static enum power_supply_property fg_power_props[] = {
 	POWER_SUPPLY_PROP_HI_POWER,
 };
 
+#ifdef CONFIG_MACH_COMMA
+static bool is_oneplus_batt_available(struct fg_chip *chip)
+{
+	if (!chip->bq_psy)
+		chip->bq_psy = power_supply_get_by_name("bq27541");
+
+	if (!chip->bq_psy)
+		return false;
+
+	return true;
+}
+
+static int fg_get_oneplus_prop(struct fg_chip *chip,
+	enum power_supply_property psp, union power_supply_propval *val)
+{
+	if (!is_oneplus_batt_available(chip))
+		return -ENODEV;
+
+	switch (psp) {
+	case POWER_SUPPLY_PROP_CAPACITY:
+	case POWER_SUPPLY_PROP_CURRENT_NOW:
+	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
+	case POWER_SUPPLY_PROP_TEMP:
+		chip->bq_psy->get_property(chip->bq_psy, psp, val);
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return 0;
+}
+#endif
+
 static int fg_power_get_property(struct power_supply *psy,
 				       enum power_supply_property psp,
 				       union power_supply_propval *val)
 {
 	struct fg_chip *chip = container_of(psy, struct fg_chip, bms_psy);
 	bool vbatt_low_sts;
+
+#ifdef CONFIG_MACH_COMMA
+	if (comma_board_id() == COMMA_BOARD_ONEPLUS) {
+		if (!fg_get_oneplus_prop(chip, psp, val))
+			return 0;
+	}
+#endif
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_BATTERY_TYPE:
@@ -6857,6 +6904,7 @@ static int fg_memif_data_open(struct inode *inode, struct file *file)
 	trans->addr = dbgfs_data.addr;
 	trans->chip = dbgfs_data.chip;
 	trans->offset = trans->addr;
+	mutex_init(&trans->memif_dfs_lock);
 
 	file->private_data = trans;
 	return 0;
@@ -6868,6 +6916,7 @@ static int fg_memif_dfs_close(struct inode *inode, struct file *file)
 
 	if (trans && trans->log && trans->data) {
 		file->private_data = NULL;
+		mutex_destroy(&trans->memif_dfs_lock);
 		kfree(trans->log);
 		kfree(trans->data);
 		kfree(trans);
@@ -7025,10 +7074,13 @@ static ssize_t fg_memif_dfs_reg_read(struct file *file, char __user *buf,
 	size_t ret;
 	size_t len;
 
+	mutex_lock(&trans->memif_dfs_lock);
 	/* Is the the log buffer empty */
 	if (log->rpos >= log->wpos) {
-		if (get_log_data(trans) <= 0)
-			return 0;
+		if (get_log_data(trans) <= 0) {
+			len = 0;
+			goto unlock_mutex;
+		}
 	}
 
 	len = min(count, log->wpos - log->rpos);
@@ -7036,7 +7088,8 @@ static ssize_t fg_memif_dfs_reg_read(struct file *file, char __user *buf,
 	ret = copy_to_user(buf, &log->data[log->rpos], len);
 	if (ret == len) {
 		pr_err("error copy sram register values to user\n");
-		return -EFAULT;
+		len = -EFAULT;
+		goto unlock_mutex;
 	}
 
 	/* 'ret' is the number of bytes not copied */
@@ -7044,6 +7097,9 @@ static ssize_t fg_memif_dfs_reg_read(struct file *file, char __user *buf,
 
 	*ppos += len;
 	log->rpos += len;
+
+unlock_mutex:
+	mutex_unlock(&trans->memif_dfs_lock);
 	return len;
 }
 
@@ -7064,14 +7120,20 @@ static ssize_t fg_memif_dfs_reg_write(struct file *file, const char __user *buf,
 	int cnt = 0;
 	u8  *values;
 	size_t ret = 0;
+	char *kbuf;
+	u32 offset;
 
 	struct fg_trans *trans = file->private_data;
-	u32 offset = trans->offset;
+
+	mutex_lock(&trans->memif_dfs_lock);
+	offset = trans->offset;
 
 	/* Make a copy of the user data */
-	char *kbuf = kmalloc(count + 1, GFP_KERNEL);
-	if (!kbuf)
-		return -ENOMEM;
+	kbuf = kmalloc(count + 1, GFP_KERNEL);
+	if (!kbuf) {
+		ret = -ENOMEM;
+		goto unlock_mutex;
+	}
 
 	ret = copy_from_user(kbuf, buf, count);
 	if (ret == count) {
@@ -7110,6 +7172,8 @@ static ssize_t fg_memif_dfs_reg_write(struct file *file, const char __user *buf,
 
 free_buf:
 	kfree(kbuf);
+unlock_mutex:
+	mutex_unlock(&trans->memif_dfs_lock);
 	return ret;
 }
 
@@ -7850,7 +7914,8 @@ static int fg_setup_memif_offset(struct fg_chip *chip)
 		return rc;
 	}
 
-	switch (chip->revision[DIG_MAJOR]) {
+	dig_major = chip->revision[DIG_MAJOR];
+	switch (dig_major) {
 	case DIG_REV_1:
 	case DIG_REV_2:
 		chip->offset = offset[0].address;

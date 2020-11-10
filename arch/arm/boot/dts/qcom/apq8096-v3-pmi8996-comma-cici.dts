@@ -1,0 +1,58 @@
+/*
+ * Copyright (C) 2018, Comma.ai, Inc.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+/dts-v1/;
+
+#include "apq8096-v3.dtsi"
+#include "msm-pmi8996.dtsi"
+#include "apq8096-dragonboard.dtsi"
+
+/ {
+	model = "Qualcomm Technologies, Inc. APQ8096v3 + PMI8996 microSOM-820";
+	compatible = "qcom,apq8096-dragonboard", "qcom,msm8996",
+			"qcom,apq8096", "qcom,dragonboard";
+	qcom,msm-id = <246 0x30000>, <291 0x30000>,
+			<246 0x30001>, <291 0x30001>;
+	qcom,board-id = <10 28>;
+	comma,board-name = "cici";
+};
+
+&i2c_6 {
+	memsic@30 {
+		compatible = "memsic,mmc3416x";
+		reg = <0x30>;
+		vdd-supply = <&pm8994_lvs2>;
+		vio-supply = <&pm8994_lvs2>;
+		memsic,dir = "obverse-x-axis-forward";
+	};
+
+	lsm6ds3@6a {
+		compatible = "st,lsm6ds3";
+		reg = <0x6a>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <117 IRQ_TYPE_EDGE_RISING>;
+	};
+
+	bosch280@76 {
+		compatible = "bosch,bmp280";
+		reg = <0x76>;
+	};
+};
+
+&pm8994_lvs2 {
+	regulator-always-on;
+};
+
+&pmi8994_charger {
+	status = "disabled";
+};

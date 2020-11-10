@@ -689,7 +689,6 @@ static void ffs_user_copy_worker(struct work_struct *work)
 
 	usb_ep_free_request(io_data->ep, io_data->req);
 
-	io_data->kiocb->private = NULL;
 	if (io_data->read)
 		kfree(io_data->iovec);
 	kfree(io_data->buf);
@@ -1699,9 +1698,11 @@ static int ffs_epfiles_create(struct ffs_data *ffs)
 		init_waitqueue_head(&epfile->wait);
 		atomic_set(&epfile->opened, 0);
 		if (ffs->user_flags & FUNCTIONFS_VIRTUAL_ADDR)
-			sprintf(epfiles->name, "ep%02x", ffs->eps_addrmap[i]);
+			snprintf(epfiles->name, sizeof(epfiles->name),
+				"ep%02x", ffs->eps_addrmap[i]);
 		else
-			sprintf(epfiles->name, "ep%u", i);
+			snprintf(epfiles->name, sizeof(epfiles->name),
+				"ep%u", i);
 		epfile->dentry = ffs_sb_create_file(ffs->sb, epfiles->name,
 						 epfile,
 						 &ffs_epfile_operations);

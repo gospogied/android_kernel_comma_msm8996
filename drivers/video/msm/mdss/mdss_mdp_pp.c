@@ -1,6 +1,5 @@
 /*
- * Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
- * Copyright (C) 2016 XiaoMi, Inc.
+ * Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -501,8 +500,9 @@ static void mdss_mdp_hist_irq_set_mask(u32 irq);
 static void mdss_mdp_hist_irq_clear_mask(u32 irq);
 static void mdss_mdp_hist_intr_notify(u32 disp);
 static int mdss_mdp_panel_default_dither_config(struct msm_fb_data_type *mfd,
-					u32 panel_bpp);
-static int mdss_mdp_limited_lut_igc_config(struct msm_fb_data_type *mfd);
+						u32 panel_bpp, bool enable);
+static int mdss_mdp_limited_lut_igc_config(struct msm_fb_data_type *mfd,
+					bool enable);
 static inline int pp_validate_dspp_mfd_block(struct msm_fb_data_type *mfd,
 					int block);
 static int pp_mfd_release_all(struct msm_fb_data_type *mfd);
@@ -1834,7 +1834,7 @@ static int pp_dspp_setup(u32 disp_num, struct mdss_mdp_mixer *mixer)
 	u32 ad_flags, flags, dspp_num, opmode = 0, ad_bypass;
 	struct mdp_pgc_lut_data *pgc_config;
 	struct pp_sts_type *pp_sts;
-	char __iomem *base, *addr;
+	char __iomem *base, *addr = NULL;
 	int ret = 0;
 	struct mdss_data_type *mdata;
 	struct mdss_ad_info *ad = NULL;
@@ -2444,8 +2444,8 @@ int mdss_mdp_pp_init(struct device *dev)
 	int i, ret = 0;
 	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
 	struct mdss_mdp_pipe *vig;
-	struct pp_hist_col_info *hist;
 	void *ret_ptr = NULL;
+	struct pp_hist_col_info *hist = NULL;
 	u32 ctl_off = 0;
 
 	if (!mdata)
@@ -2574,6 +2574,8 @@ int mdss_mdp_pp_overlay_init(struct msm_fb_data_type *mfd)
 		pr_err("Invalid mfd %p mdata %p\n", mfd, mdata);
 		return -EPERM;
 	}
+	if (mfd->index >= (MDP_BLOCK_MAX - MDP_LOGICAL_BLOCK_DISP_0))
+		return 0;
 
 	if (mdata->nad_cfgs)
 		mfd->mdp.ad_calc_bl = pp_ad_calc_bl;
@@ -2582,7 +2584,8 @@ int mdss_mdp_pp_overlay_init(struct msm_fb_data_type *mfd)
 }
 
 int mdss_mdp_pp_default_overlay_config(struct msm_fb_data_type *mfd,
-					struct mdss_panel_data *pdata)
+					struct mdss_panel_data *pdata,
+					bool enable)
 {
 	int ret = 0;
 
@@ -2591,13 +2594,14 @@ int mdss_mdp_pp_default_overlay_config(struct msm_fb_data_type *mfd,
 		return -EINVAL;
 	}
 
-	ret = mdss_mdp_panel_default_dither_config(mfd, pdata->panel_info.bpp);
+	ret = mdss_mdp_panel_default_dither_config(mfd, pdata->panel_info.bpp,
+						enable);
 	if (ret)
 		pr_err("Unable to configure default dither on fb%d ret %d\n",
 			mfd->index, ret);
 
 	if (pdata->panel_info.type == DTV_PANEL) {
-		ret = mdss_mdp_limited_lut_igc_config(mfd);
+		ret = mdss_mdp_limited_lut_igc_config(mfd, enable);
 		if (ret)
 			pr_err("Unable to configure DTV panel default IGC ret %d\n",
 				ret);
@@ -2651,8 +2655,8 @@ static int pp_ad_calc_bl(struct msm_fb_data_type *mfd, int bl_in, int *bl_out,
 	mutex_lock(&ad->lock);
 	if (!mfd->ad_bl_level)
 		mfd->ad_bl_level = bl_in;
-	if (!(ad->state & PP_AD_STATE_RUN)) {
-		pr_debug("AD is not running.\n");
+	if (!(ad->sts & PP_STS_ENABLE)) {
+		pr_debug("AD is not enabled.\n");
 		mutex_unlock(&ad->lock);
 		return -EPERM;
 	}
@@ -2675,22 +2679,27 @@ static int pp_ad_calc_bl(struct msm_fb_data_type *mfd, int bl_in, int *bl_out,
 		return ret;
 	}
 
-	ret = pp_ad_attenuate_bl(ad, temp, &temp);
-	if (ret) {
-		pr_err("Failed to attenuate BL: %d\n", ret);
-		mutex_unlock(&ad->lock);
-		return ret;
-	}
-	ad_bl_out = temp;
+	if (ad->init.alpha > 0) {
+		ret = pp_ad_attenuate_bl(ad, temp, &temp);
+		if (ret) {
+			pr_err("Failed to attenuate BL: %d\n", ret);
+			mutex_unlock(&ad->lock);
+			return ret;
+		}
+		ad_bl_out = temp;
 
-	ret = pp_ad_linearize_bl(ad, temp, &temp, MDP_PP_AD_BL_LINEAR_INV);
-	if (ret) {
-		pr_err("Failed to inverse linearize BL: %d\n", ret);
-		mutex_unlock(&ad->lock);
-		return ret;
+		ret = pp_ad_linearize_bl(ad, temp, &temp,
+						MDP_PP_AD_BL_LINEAR_INV);
+		if (ret) {
+			pr_err("Failed to inverse linearize BL: %d\n", ret);
+			mutex_unlock(&ad->lock);
+			return ret;
+		}
+		*bl_out = temp;
+	} else {
+		ad_bl_out = temp;
 	}
 
-	*bl_out = temp;
 	if (pp_ad_bl_threshold_check(ad->init.al_thresh, ad->init.alpha_base,
 					ad->last_bl, ad_bl_out)) {
 		mfd->ad_bl_level = ad_bl_out;
@@ -3282,7 +3291,8 @@ static void pp_update_igc_lut(struct mdp_igc_lut_data *cfg,
 		writel_relaxed((cfg->c2_data[i] & 0xFFF) | data, addr);
 }
 
-static int mdss_mdp_limited_lut_igc_config(struct msm_fb_data_type *mfd)
+static int mdss_mdp_limited_lut_igc_config(struct msm_fb_data_type *mfd,
+					bool enable)
 {
 	int ret = 0;
 	u32 copyback = 0;
@@ -3307,7 +3317,10 @@ static int mdss_mdp_limited_lut_igc_config(struct msm_fb_data_type *mfd)
 		pr_err("failed to get default IGC version, ret %d\n", ret);
 
 	config.version = igc_version.version_info;
-	config.ops = MDP_PP_OPS_WRITE | MDP_PP_OPS_ENABLE;
+	if (enable)
+		config.ops = MDP_PP_OPS_WRITE | MDP_PP_OPS_ENABLE;
+	else
+		config.ops = MDP_PP_OPS_DISABLE;
 	config.block = (mfd->index) + MDP_LOGICAL_BLOCK_DISP_0;
 	switch (config.version) {
 	case mdp_igc_v1_7:
@@ -3898,7 +3911,7 @@ enhist_config_exit:
 }
 
 static int mdss_mdp_panel_default_dither_config(struct msm_fb_data_type *mfd,
-					u32 panel_bpp)
+					u32 panel_bpp, bool enable)
 {
 	int ret = 0;
 	struct mdp_dither_cfg_data dither;
@@ -3923,29 +3936,32 @@ static int mdss_mdp_panel_default_dither_config(struct msm_fb_data_type *mfd,
 		return ret;
 	}
 	dither.version = dither_version.version_info;
+	dither.cfg_payload = NULL;
 
-	switch (panel_bpp) {
-	case 18:
-		dither.flags = MDP_PP_OPS_ENABLE | MDP_PP_OPS_WRITE;
-		switch (dither.version) {
-		case mdp_dither_v1_7:
-			dither_data.g_y_depth = 2;
-			dither_data.r_cr_depth = 2;
-			dither_data.b_cb_depth = 2;
-			dither.cfg_payload = &dither_data;
+	if (enable) {
+		switch (panel_bpp) {
+		case 18:
+			dither.flags = MDP_PP_OPS_ENABLE | MDP_PP_OPS_WRITE;
+			switch (dither.version) {
+			case mdp_dither_v1_7:
+				dither_data.g_y_depth = 2;
+				dither_data.r_cr_depth = 2;
+				dither_data.b_cb_depth = 2;
+				dither.cfg_payload = &dither_data;
+				break;
+			case mdp_pp_legacy:
+			default:
+				dither.g_y_depth = 2;
+				dither.r_cr_depth = 2;
+				dither.b_cb_depth = 2;
+				dither.cfg_payload = NULL;
+				break;
+			}
 			break;
-		case mdp_pp_legacy:
 		default:
-			dither.g_y_depth = 2;
-			dither.r_cr_depth = 2;
-			dither.b_cb_depth = 2;
 			dither.cfg_payload = NULL;
 			break;
 		}
-		break;
-	default:
-		dither.cfg_payload = NULL;
-		break;
 	}
 	ret = mdss_mdp_dither_config(mfd, &dither, NULL, true);
 	if (ret)
@@ -5748,6 +5764,8 @@ static int mdss_mdp_ad_setup(struct msm_fb_data_type *mfd)
 		ad->sts &= ~PP_AD_STS_DIRTY_DATA;
 		ad->state |= PP_AD_STATE_DATA;
 		pr_debug("dirty data, last_bl = %d\n", ad->last_bl);
+		if (!bl_mfd->ad_bl_level)
+			bl_mfd->ad_bl_level = bl_mfd->bl_level;
 		bl = bl_mfd->ad_bl_level;
 
 		if (ad->last_bl != bl) {
@@ -5835,6 +5853,7 @@ static int mdss_mdp_ad_setup(struct msm_fb_data_type *mfd)
 			memset(&ad->cfg, 0, sizeof(struct mdss_ad_cfg));
 			bl_mfd->ext_bl_ctrl = 0;
 			bl_mfd->ext_ad_ctrl = -1;
+			bl_mfd->ad_bl_level = 0;
 		}
 		ad->state &= ~PP_AD_STATE_RUN;
 	}
@@ -5939,7 +5958,7 @@ static void pp_ad_cfg_lut(char __iomem *addr, u32 *data)
 }
 
 /* must call this function from within ad->lock */
-static int  pp_ad_attenuate_bl(struct mdss_ad_info *ad, u32 bl, u32 *bl_out)
+static int pp_ad_attenuate_bl(struct mdss_ad_info *ad, u32 bl, u32 *bl_out)
 {
 	u32 shift = 0, ratio_temp = 0;
 	u32 n, lut_interval, bl_att;
@@ -6908,6 +6927,13 @@ static int pp_mfd_release_all(struct msm_fb_data_type *mfd)
 {
 	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
 	int ret = 0;
+	if (!mfd || !mdata) {
+		pr_err("Invalid mfd %p mdata %p\n", mfd, mdata);
+		return -EPERM;
+	}
+
+	if (mfd->index >= (MDP_BLOCK_MAX - MDP_LOGICAL_BLOCK_DISP_0))
+		return ret;
 
 	if (mdata->nad_cfgs) {
 		ret = pp_mfd_ad_release_all(mfd);
@@ -6956,8 +6982,8 @@ static int pp_mfd_ad_release_all(struct msm_fb_data_type *mfd)
 	ad->mfd = NULL;
 	ad->bl_mfd = NULL;
 	ad->state = 0;
-	cancel_work_sync(&ad->calc_work);
 	mutex_unlock(&ad->lock);
+	cancel_work_sync(&ad->calc_work);
 
 	ctl = mfd_to_ctl(mfd);
 	if (ctl && ctl->ops.remove_vsync_handler)

@@ -955,7 +955,7 @@ static enum vidc_status hfi_parse_init_done_properties(
 		}
 		default:
 			dprintk(VIDC_DBG,
-				"%s: default case - data_ptr %p, prop_id 0x%x\n",
+				"%s: default case - data_ptr %pK, prop_id 0x%x\n",
 				__func__, data_ptr, prop_id);
 			break;
 		}
@@ -1055,7 +1055,7 @@ static void hfi_process_sess_get_prop_profile_level(
 	dprintk(VIDC_DBG, "Entered %s\n", __func__);
 	if (!prop) {
 		dprintk(VIDC_ERR,
-			"hal_process_sess_get_profile_level: bad_prop: %p\n",
+			"hal_process_sess_get_profile_level: bad_prop: %pK\n",
 			prop);
 		return;
 	}
@@ -1086,7 +1086,7 @@ static void hfi_process_sess_get_prop_buf_req(
 
 	if (!prop) {
 		dprintk(VIDC_ERR,
-			"hal_process_sess_get_prop_buf_req: bad_prop: %p\n",
+			"hal_process_sess_get_prop_buf_req: bad_prop: %pK\n",
 			prop);
 		return;
 	}
@@ -1203,7 +1203,7 @@ static int hfi_process_session_prop_info(u32 device_id,
 {
 	struct msm_vidc_cb_cmd_done cmd_done = {0};
 	struct hfi_profile_level profile_level = {0};
-	enum hal_h264_entropy entropy;
+	enum hal_h264_entropy entropy = 0;
 	struct buffer_requirements buff_req = { { {0} } };
 
 	dprintk(VIDC_DBG, "Received SESSION_PROPERTY_INFO[%#x]\n",

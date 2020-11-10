@@ -1176,14 +1176,14 @@ static int __validate_layers(struct msm_fb_data_type *mfd,
 	u32 mixer_mux, dst_x;
 	int layer_count = commit->input_layer_cnt;
 
-	struct mdss_mdp_pipe *pipe, *tmp, *left_blend_pipe;
+	struct mdss_mdp_pipe *pipe = NULL, *tmp, *left_blend_pipe;
 	struct mdss_mdp_pipe *right_plist[MAX_PIPES_PER_LM] = {0};
 	struct mdss_mdp_pipe *left_plist[MAX_PIPES_PER_LM] = {0};
 	struct mdss_overlay_private *mdp5_data = mfd_to_mdp5_data(mfd);
 
 	struct mdss_mdp_mixer *mixer = NULL;
 	struct mdp_input_layer *layer, *prev_layer, *layer_list;
-	bool is_single_layer = false;
+	bool is_single_layer = false, force_validate;
 	enum layer_pipe_q pipe_q_type;
 
 	ret = mutex_lock_interruptible(&mdp5_data->ov_lock);
@@ -1207,6 +1207,15 @@ static int __validate_layers(struct msm_fb_data_type *mfd,
 		}
 		inputndx |= layer_list[i].pipe_ndx;
 	}
+
+	/*
+	 * Force all layers to go through full validation after
+	 * dynamic resolution switch, immaterial of the configs in
+	 * the layer.
+	 */
+	mutex_lock(&mfd->switch_lock);
+	force_validate = (mfd->switch_state != MDSS_MDP_NO_UPDATE_REQUESTED);
+	mutex_unlock(&mfd->switch_lock);
 
 	for (i = 0; i < layer_count; i++) {
 		layer = &layer_list[i];
@@ -1255,7 +1264,8 @@ static int __validate_layers(struct msm_fb_data_type *mfd,
 		 * are same. validation can be skipped if only buffer handle
 		 * is changed.
 		 */
-		pipe = __find_layer_in_validate_q(layer, mdp5_data);
+		pipe = (force_validate) ? NULL :
+				__find_layer_in_validate_q(layer, mdp5_data);
 		if (pipe) {
 			if (mixer_mux == MDSS_MDP_MIXER_MUX_RIGHT)
 				right_plist[right_cnt++] = pipe;
@@ -1420,12 +1430,14 @@ static void __parse_frc_info(struct mdss_overlay_private *mdp5_data,
 	struct mdp_frc_info *input_frc)
 {
 	struct mdss_mdp_ctl *ctl = mdp5_data->ctl;
-	struct mdss_mdp_frc_info *frc_info = mdp5_data->frc_info;
+	struct mdss_mdp_frc_fsm *frc_fsm = mdp5_data->frc_fsm;
 
 	if (input_frc->flags & MDP_VIDEO_FRC_ENABLE) {
-		if (!frc_info->enable) {
-			/* init frc_info when first entry */
-			memset(frc_info, 0, sizeof(struct mdss_mdp_frc_info));
+		struct mdss_mdp_frc_info *frc_info = &frc_fsm->frc_info;
+
+		if (!frc_fsm->enable) {
+			/* init frc_fsm when first entry */
+			mdss_mdp_frc_fsm_init_state(frc_fsm);
 			/* keep vsync on when FRC is enabled */
 			ctl->ops.add_vsync_handler(ctl,
 					&ctl->frc_vsync_handler);
@@ -1433,14 +1445,14 @@ static void __parse_frc_info(struct mdss_overlay_private *mdp5_data,
 
 		frc_info->cur_frc.frame_cnt = input_frc->frame_cnt;
 		frc_info->cur_frc.timestamp = input_frc->timestamp;
-	} else if (frc_info->enable) {
+	} else if (frc_fsm->enable) {
 		/* remove vsync handler when FRC is disabled */
 		ctl->ops.remove_vsync_handler(ctl, &ctl->frc_vsync_handler);
 	}
 
-	frc_info->enable = input_frc->flags & MDP_VIDEO_FRC_ENABLE;
+	frc_fsm->enable = input_frc->flags & MDP_VIDEO_FRC_ENABLE;
 
-	pr_debug("frc_enable=%d\n", frc_info->enable);
+	pr_debug("frc_enable=%d\n", frc_fsm->enable);
 }
 
 /*

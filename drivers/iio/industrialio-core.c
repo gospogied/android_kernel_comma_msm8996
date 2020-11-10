@@ -70,6 +70,16 @@ static const char * const iio_chan_type_name_spec[] = {
 	[IIO_CCT] = "cct",
 	[IIO_PRESSURE] = "pressure",
 	[IIO_HUMIDITYRELATIVE] = "humidityrelative",
+#ifdef CONFIG_MACH_COMMA
+	[IIO_SIGN_MOTION] = "sign_motion",
+	[IIO_STEP_DETECTOR] = "step_detector",
+	[IIO_STEP_COUNTER] = "step_counter",
+	[IIO_TILT] = "tilt",
+	[IIO_TAP] = "tap",
+	[IIO_TAP_TAP] = "tap_tap",
+	[IIO_WRIST_TILT_GESTURE] = "wrist",
+	[IIO_GESTURE] = "gesture",
+#endif
 };
 
 static const char * const iio_modifier_names[] = {
@@ -113,6 +123,9 @@ static const char * const iio_chan_info_postfix[] = {
 	[IIO_CHAN_INFO_HARDWAREGAIN] = "hardwaregain",
 	[IIO_CHAN_INFO_HYSTERESIS] = "hysteresis",
 	[IIO_CHAN_INFO_INT_TIME] = "integration_time",
+#ifdef CONFIG_MACH_COMMA
+	[IIO_CHAN_INFO_OVERSAMPLING_RATIO] = "oversampling_ratio",
+#endif
 };
 
 /**

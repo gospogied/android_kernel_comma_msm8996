@@ -86,3 +86,61 @@ void hdd_ipa_uc_rt_debug_host_dump(hdd_context_t *hdd_ctx)
 }
 #endif
 #endif
+bool hdd_ipa_is_present(hdd_context_t *hdd_ctx);
+void hdd_ipa_reset_ipaconfig(hdd_context_t *hdd_ctx, v_U32_t ipaconfig);
+
+#ifdef IPA_UC_STA_OFFLOAD
+int hdd_ipa_send_mcc_scc_msg(hdd_context_t *hdd_ctx, bool mcc_mode);
+#endif
+
+#ifdef IPA_UC_OFFLOAD
+void hdd_ipa_uc_force_pipe_shutdown(hdd_context_t *hdd_ctx);
+int hdd_ipa_uc_ssr_reinit(void);
+int hdd_ipa_uc_ssr_deinit(void);
+void hdd_ipa_uc_stat_query(hdd_context_t *pHddCtx,
+	uint32_t *ipa_tx_diff, uint32_t *ipa_rx_diff);
+void hdd_ipa_uc_stat_request( hdd_adapter_t *adapter, uint8_t reason);
+void hdd_ipa_uc_rt_debug_host_dump(hdd_context_t *hdd_ctx);
+#endif /* IPA_UC_OFFLOAD */
+#else /* IPA_OFFLOAD */
+#define hdd_ipa_set_perf_level(hdd_ctx, tx_p, rx_p) /* no-op */
+/**
+ * hdd_ipa_is_present() - get IPA hw status
+ * @hdd_ctx: pointer to hdd context
+ *
+ * Return: true - ipa hw present
+ *         false - ipa hw not present
+ */
+static inline
+bool hdd_ipa_is_present(hdd_context_t *hdd_ctx)
+{
+	return false;
+}
+
+/**
+ * hdd_ipa_reset_ipaconfig() - reset IpaConfig
+ * @hdd_ctx: pointer to hdd context
+ * @ipaconfig: new value for IpaConfig
+ *
+ * Return: none
+ */
+static inline
+void hdd_ipa_reset_ipaconfig(hdd_context_t *hdd_ctx, v_U32_t ipaconfig)
+{
+	return;
+}
+#endif /* IPA_OFFLOAD */
+
+#if !defined(IPA_OFFLOAD) || !defined(IPA_UC_OFFLOAD)
+static inline
+void hdd_ipa_uc_force_pipe_shutdown(hdd_context_t *hdd_ctx)
+{
+	return;
+}
+static inline
+void hdd_ipa_uc_rt_debug_host_dump(hdd_context_t *hdd_ctx)
+{
+	return;
+}
+#endif
+#endif

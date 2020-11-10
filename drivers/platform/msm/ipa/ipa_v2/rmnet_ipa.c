@@ -2481,13 +2481,30 @@ int rmnet_ipa_set_data_quota(struct wan_ioctl_set_data_quota *data)
  *
  * Return codes:
  * 0: Success
- * -EFAULT: Invalid interface name provided
+ * -EFAULT: Invalid src/dst pipes provided
  * other: See ipa_qmi_set_data_quota
  */
 int rmnet_ipa_set_tether_client_pipe(
 	struct wan_ioctl_set_tether_client_pipe *data)
 {
 	int number, i;
+
+	/* error checking if ul_src_pipe_len valid or not*/
+	if (data->ul_src_pipe_len > QMI_IPA_MAX_PIPES_V01 ||
+		data->ul_src_pipe_len < 0) {
+		IPAWANERR("UL src pipes %d exceeding max %d\n",
+			data->ul_src_pipe_len,
+			QMI_IPA_MAX_PIPES_V01);
+		return -EFAULT;
+	}
+	/* error checking if dl_dst_pipe_len valid or not*/
+	if (data->dl_dst_pipe_len > QMI_IPA_MAX_PIPES_V01 ||
+		data->dl_dst_pipe_len < 0) {
+		IPAWANERR("DL dst pipes %d exceeding max %d\n",
+			data->dl_dst_pipe_len,
+			QMI_IPA_MAX_PIPES_V01);
+		return -EFAULT;
+	}
 
 	IPAWANDBG("client %d, UL %d, DL %d, reset %d\n",
 	data->ipa_client,
@@ -2526,21 +2543,15 @@ int rmnet_ipa_query_tethering_stats(struct wan_ioctl_query_tether_stats *data,
 	struct ipa_get_data_stats_resp_msg_v01 *resp;
 	int pipe_len, rc;
 
-	req = kzalloc(sizeof(struct ipa_get_data_stats_req_msg_v01),
-			GFP_KERNEL);
-	if (!req) {
-		IPAWANERR("Can't allocate memory for stats message\n");
-		return rc;
-	}
-	resp = kzalloc(sizeof(struct ipa_get_data_stats_resp_msg_v01),
-			GFP_KERNEL);
+	req = kzalloc(sizeof(*req), GFP_KERNEL);
+	if (!req)
+		return -ENOMEM;
+
+	resp = kzalloc(sizeof(*resp), GFP_KERNEL);
 	if (!resp) {
-		IPAWANERR("Can't allocate memory for stats message\n");
 		kfree(req);
-		return rc;
+		return -ENOMEM;
 	}
-	memset(req, 0, sizeof(struct ipa_get_data_stats_req_msg_v01));
-	memset(resp, 0, sizeof(struct ipa_get_data_stats_resp_msg_v01));
 
 	req->ipa_stats_type = QMI_IPA_STATS_TYPE_PIPE_V01;
 	if (reset) {

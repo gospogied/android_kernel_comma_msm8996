@@ -1,5 +1,4 @@
-/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
- * Copyright (C) 2016 XiaoMi, Inc.
+/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -586,6 +585,7 @@ struct buf_data {
 	char *string_buf; /* cmd buf as string, 3 bytes per number */
 	int sblen; /* string buffer length */
 	int sync_flag;
+	struct mutex dbg_mutex; /* mutex to synchronize read/write/flush */
 };
 
 struct mdss_dsi_debugfs_info {
@@ -675,6 +675,7 @@ static ssize_t mdss_dsi_cmd_read(struct file *file, char __user *buf,
 	char *bp;
 	ssize_t ret = 0;
 
+	mutex_lock(&pcmds->dbg_mutex);
 	if (*ppos == 0) {
 		kfree(pcmds->string_buf);
 		pcmds->string_buf = NULL;
@@ -693,6 +694,7 @@ static ssize_t mdss_dsi_cmd_read(struct file *file, char __user *buf,
 		buffer = kmalloc(bsize, GFP_KERNEL);
 		if (!buffer) {
 			pr_err("%s: Failed to allocate memory\n", __func__);
+			mutex_unlock(&pcmds->dbg_mutex);
 			return -ENOMEM;
 		}
 
@@ -728,10 +730,12 @@ static ssize_t mdss_dsi_cmd_read(struct file *file, char __user *buf,
 		kfree(pcmds->string_buf);
 		pcmds->string_buf = NULL;
 		pcmds->sblen = 0;
+		mutex_unlock(&pcmds->dbg_mutex);
 		return 0; /* the end */
 	}
 	ret = simple_read_from_buffer(buf, count, ppos, pcmds->string_buf,
 				      pcmds->sblen);
+	mutex_unlock(&pcmds->dbg_mutex);
 	return ret;
 }
 
@@ -743,6 +747,7 @@ static ssize_t mdss_dsi_cmd_write(struct file *file, const char __user *p,
 	int blen = 0;
 	char *string_buf;
 
+	mutex_lock(&pcmds->dbg_mutex);
 	if (*ppos == 0) {
 		kfree(pcmds->string_buf);
 		pcmds->string_buf = NULL;
@@ -754,6 +759,7 @@ static ssize_t mdss_dsi_cmd_write(struct file *file, const char __user *p,
 	string_buf = krealloc(pcmds->string_buf, blen + 1, GFP_KERNEL);
 	if (!string_buf) {
 		pr_err("%s: Failed to allocate memory\n", __func__);
+		mutex_unlock(&pcmds->dbg_mutex);
 		return -ENOMEM;
 	}
 
@@ -763,6 +769,7 @@ static ssize_t mdss_dsi_cmd_write(struct file *file, const char __user *p,
 	string_buf[blen] = '\0';
 	pcmds->string_buf = string_buf;
 	pcmds->sblen = blen;
+	mutex_unlock(&pcmds->dbg_mutex);
 	return ret;
 }
 
@@ -773,8 +780,12 @@ static int mdss_dsi_cmd_flush(struct file *file, fl_owner_t id)
 	char *buf, *bufp, *bp;
 	struct dsi_ctrl_hdr *dchdr;
 
-	if (!pcmds->string_buf)
+	mutex_lock(&pcmds->dbg_mutex);
+
+	if (!pcmds->string_buf) {
+		mutex_unlock(&pcmds->dbg_mutex);
 		return 0;
+	}
 
 	/*
 	 * Allocate memory for command buffer
@@ -787,6 +798,7 @@ static int mdss_dsi_cmd_flush(struct file *file, fl_owner_t id)
 		kfree(pcmds->string_buf);
 		pcmds->string_buf = NULL;
 		pcmds->sblen = 0;
+		mutex_unlock(&pcmds->dbg_mutex);
 		return -ENOMEM;
 	}
 
@@ -811,6 +823,7 @@ static int mdss_dsi_cmd_flush(struct file *file, fl_owner_t id)
 			pr_err("%s: dtsi cmd=%x error, len=%d\n",
 				__func__, dchdr->dtype, dchdr->dlen);
 			kfree(buf);
+			mutex_unlock(&pcmds->dbg_mutex);
 			return -EINVAL;
 		}
 		bp += sizeof(*dchdr);
@@ -822,6 +835,7 @@ static int mdss_dsi_cmd_flush(struct file *file, fl_owner_t id)
 		pr_err("%s: dcs_cmd=%x len=%d error!\n", __func__,
 				bp[0], len);
 		kfree(buf);
+		mutex_unlock(&pcmds->dbg_mutex);
 		return -EINVAL;
 	}
 
@@ -834,6 +848,7 @@ static int mdss_dsi_cmd_flush(struct file *file, fl_owner_t id)
 		pcmds->buf = buf;
 		pcmds->blen = blen;
 	}
+	mutex_unlock(&pcmds->dbg_mutex);
 	return 0;
 }
 
@@ -848,6 +863,7 @@ struct dentry *dsi_debugfs_create_dcs_cmd(const char *name, umode_t mode,
 				struct dentry *parent, struct buf_data *cmd,
 				struct dsi_panel_cmds ctrl_cmds)
 {
+	mutex_init(&cmd->dbg_mutex);
 	cmd->buf = ctrl_cmds.buf;
 	cmd->blen = ctrl_cmds.blen;
 	cmd->string_buf = NULL;
@@ -927,6 +943,9 @@ static int mdss_dsi_debugfs_init(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 	}
 
 	pdata = &ctrl_pdata->panel_data;
+	if (!pdata)
+		return -EINVAL;
+
 	panel_info = pdata->panel_info;
 	rc = mdss_dsi_debugfs_setup(pdata, panel_info.debugfs_info->root);
 	if (rc) {
@@ -1085,7 +1104,6 @@ static int mdss_dsi_off(struct mdss_panel_data *pdata, int power_state)
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
 
-	mutex_lock(&ctrl_pdata->mutex);
 	panel_info = &ctrl_pdata->panel_data.panel_info;
 
 	pr_debug("%s+: ctrl=%p ndx=%d power_state=%d\n",
@@ -1144,7 +1162,6 @@ panel_power_ctrl:
 	/* Initialize Max Packet size for DCS reads */
 	ctrl_pdata->cur_max_pkt_size = 0;
 end:
-	mutex_unlock(&ctrl_pdata->mutex);
 	pr_debug("%s-:\n", __func__);
 
 	return ret;
@@ -1248,8 +1265,6 @@ static int mdss_dsi_update_panel_config(struct mdss_dsi_ctrl_pdata *ctrl_pdata,
 	ctrl_pdata->panel_mode = pinfo->mipi.mode;
 	mdss_panel_get_dst_fmt(pinfo->bpp, pinfo->mipi.mode,
 			pinfo->mipi.pixel_packing, &(pinfo->mipi.dst_format));
-	pinfo->cont_splash_enabled = 0;
-
 	return ret;
 }
 
@@ -1461,10 +1476,12 @@ static int mdss_dsi_unblank(struct mdss_panel_data *pdata)
 		mdss_dsi_clk_ctrl(sctrl, sctrl->dsi_clk_handle,
 				  MDSS_DSI_ALL_CLKS, MDSS_DSI_CLK_ON);
 
-	if (mdss_dsi_is_panel_on_lp(pdata)) {
+	if (ctrl_pdata->ctrl_state & CTRL_STATE_PANEL_LP) {
 		pr_debug("%s: dsi_unblank with panel always on\n", __func__);
 		if (ctrl_pdata->low_power_config)
 			ret = ctrl_pdata->low_power_config(pdata, false);
+		if (!ret)
+			ctrl_pdata->ctrl_state &= ~CTRL_STATE_PANEL_LP;
 		goto error;
 	}
 
@@ -1528,6 +1545,8 @@ static int mdss_dsi_blank(struct mdss_panel_data *pdata, int power_state)
 		pr_debug("%s: low power state requested\n", __func__);
 		if (ctrl_pdata->low_power_config)
 			ret = ctrl_pdata->low_power_config(pdata, true);
+		if (!ret)
+			ctrl_pdata->ctrl_state |= CTRL_STATE_PANEL_LP;
 		goto error;
 	}
 
@@ -1570,7 +1589,8 @@ static int mdss_dsi_blank(struct mdss_panel_data *pdata, int power_state)
 			}
 			ATRACE_END("dsi_panel_off");
 		}
-		ctrl_pdata->ctrl_state &= ~CTRL_STATE_PANEL_INIT;
+		ctrl_pdata->ctrl_state &= ~(CTRL_STATE_PANEL_INIT |
+			CTRL_STATE_PANEL_LP);
 	}
 
 error:
@@ -1845,7 +1865,7 @@ static int __mdss_dsi_dfps_update_clks(struct mdss_panel_data *pdata,
 {
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
 	struct mdss_dsi_ctrl_pdata *sctrl_pdata = NULL;
-	struct mdss_panel_info *pinfo, *spinfo;
+	struct mdss_panel_info *pinfo, *spinfo = NULL;
 	int rc = 0;
 	u32 data;
 
@@ -1991,7 +2011,7 @@ static int __mdss_dsi_dfps_update_clks(struct mdss_panel_data *pdata,
 
 	/* update new fps that at this point is already updated in hw */
 	pinfo->current_fps = new_fps;
-	if (sctrl_pdata) {
+	if (spinfo) {
 		spinfo->current_fps = new_fps;
 	}
 
@@ -2595,6 +2615,7 @@ static struct device_node *mdss_dsi_find_panel_of_node(
 	struct mdss_panel_info *pinfo = &ctrl_pdata->panel_data.panel_info;
 
 	len = strlen(panel_cfg);
+	ctrl_pdata->panel_data.dsc_cfg_np_name[0] = '\0';
 	if (!len) {
 		/* no panel cfg chg, parse dt */
 		pr_debug("%s:%d: no cmd line cfg present\n",
@@ -2678,18 +2699,11 @@ static struct device_node *mdss_dsi_find_panel_of_node(
 					strlcpy(cfg_np_name, str2,
 						MDSS_MAX_PANEL_LEN);
 				}
-			}
-
-			pr_debug("%s: cfg_np_name:%s\n", __func__, cfg_np_name);
-			if (str2) {
-				ctrl_pdata->panel_data.cfg_np =
-					of_get_child_by_name(dsi_pan_node,
-					cfg_np_name);
-				if (!ctrl_pdata->panel_data.cfg_np)
-					pr_warn("%s: can't find config node:%s. either no such node or bad name\n",
-						__func__, cfg_np_name);
+				strlcpy(ctrl_pdata->panel_data.dsc_cfg_np_name,
+					cfg_np_name, MDSS_MAX_PANEL_LEN);
 			}
 		}
+
 		return dsi_pan_node;
 	}
 end:
