@@ -2797,6 +2797,7 @@ static ssize_t rgb_blink_store(struct device *dev,
 	if (rc)
 		return rc;
 	rgb_sync = container_of(led_cdev, struct rgb_sync, cdev);
+	led = rgb_sync->led_data[0];
 
 	rgb_lock_leds(rgb_sync);
 	for (i = 0; i < 3; i++) {

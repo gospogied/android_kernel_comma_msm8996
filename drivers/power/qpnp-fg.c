@@ -3264,7 +3264,7 @@ static int fg_power_get_property(struct power_supply *psy,
 	bool vbatt_low_sts;
 
 #ifdef CONFIG_MACH_COMMA
-	if (comma_board_id() == COMMA_BOARD_ONEPLUS) {
+	if (comma_board_id() == COMMA_BOARD_GEMINI) {
 		if (!fg_get_oneplus_prop(chip, psp, val))
 			return 0;
 	}

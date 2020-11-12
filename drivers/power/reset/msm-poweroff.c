@@ -275,6 +275,7 @@ static void msm_restart_prepare(const char *cmd)
 		qpnp_pon_system_pwr_off(PON_POWER_OFF_HARD_RESET);
 	}
 #ifdef CONFIG_MACH_COMMA
+	if (in_panic) {
 		if (comma_board_id() == COMMA_BOARD_GEMINI)
 			qpnp_pon_set_restart_reason(PON_RESTART_REASON_REBOOT);
 		__raw_writel(0x77665501, restart_reason);
@@ -319,11 +320,7 @@ static void msm_restart_prepare(const char *cmd)
 #endif
 			__raw_writel(0x77665501, restart_reason);
 		}
-	} else {
-		qpnp_pon_set_restart_reason(
-			PON_RESTART_REASON_NORMAL);
-		__raw_writel(0x77665501, restart_reason);
-	}
+	} 
 
 	flush_cache_all();
 

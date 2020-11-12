@@ -1423,7 +1423,7 @@ IMMVIBESPIAPI VibeStatus ImmVibeSPI_ForceOut_Initialize(void)
 {
 	int i, rc;
 	struct i2c_adapter *adapter;
-	struct i2c_client *client;
+	struct i2c_client *client=NULL;
 
 	DbgOut((DBL_VERBOSE, "ImmVibeSPI_ForceOut_Initialize.\n"));
 

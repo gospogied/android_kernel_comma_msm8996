@@ -16,7 +16,7 @@
 enum comma_id {
 	COMMA_BOARD_CICI,
 	COMMA_BOARD_LEECO,
-	COMMA_BOARD_ONEPLUS
+	COMMA_BOARD_GEMINI
 };
 
 enum comma_id comma_board_id(void);

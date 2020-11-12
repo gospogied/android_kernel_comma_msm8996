@@ -22,7 +22,7 @@
  */
 static int __init charger_mode_reset(void)
 {
-	if (comma_board_id() != COMMA_BOARD_ONEPLUS)
+	if (comma_board_id() != COMMA_BOARD_GEMINI)
 		return 0;
 
 	if (strstr(saved_command_line, "androidboot.mode=charger"))

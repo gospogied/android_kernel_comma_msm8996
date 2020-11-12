@@ -139,7 +139,7 @@ static void msm_actuator_parse_i2c_params(struct msm_actuator_ctrl_t *a_ctrl,
 
 	for (i = 0; i < size; i++) {
 #ifdef CONFIG_MACH_COMMA
-		if (comma_board_id() == COMMA_BOARD_ONEPLUS) {
+		if (comma_board_id() == COMMA_BOARD_GEMINI) {
 			uint16_t j, reg_data[3], start;
 
 			value = (next_lens_position <<
@@ -1207,7 +1207,7 @@ static int32_t msm_actuator_set_position(
 	}
 
 #ifdef CONFIG_MACH_COMMA
-	if (comma_board_id() == COMMA_BOARD_ONEPLUS) {
+	if (comma_board_id() == COMMA_BOARD_GEMINI) {
 		for (index = 0; index < set_pos->number_of_steps; index++) {
 			uint8_t data[4];
 

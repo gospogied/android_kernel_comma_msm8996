@@ -54,7 +54,7 @@ static int32_t msm_ois_write_settings(struct msm_ois_ctrl_t *o_ctrl,
 			case MSM_CAMERA_I2C_BYTE_DATA:
 			case MSM_CAMERA_I2C_WORD_DATA:
 #ifdef CONFIG_MACH_COMMA
-				/* Only COMMA_BOARD_ONEPLUS uses OIS */
+				/* Only COMMA_BOARD_GEMINI uses OIS */
 				o_ctrl->i2c_client.addr_type = settings[i].addr_type;
 #endif
 				rc = o_ctrl->i2c_client.i2c_func_tbl->i2c_write(

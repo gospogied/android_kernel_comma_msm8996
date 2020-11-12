@@ -75,7 +75,7 @@ void comma_balance_irq(unsigned int irq)
 		intense_irqs = leeco_intense_irqs;
 		intense_irq_cnt = ARRAY_SIZE(leeco_intense_irqs);
 		break;
-	case COMMA_BOARD_ONEPLUS:
+	case COMMA_BOARD_GEMINI:
 		intense_irqs = oneplus_intense_irqs;
 		intense_irq_cnt = ARRAY_SIZE(oneplus_intense_irqs);
 		break;
