@@ -511,5 +511,7 @@ static void platform_release(struct device *dev)
 	DbgOut((DBL_ERROR, "tspdrv: platform_release.\n"));
 }
 
+#ifndef CONFIG_MACH_COMMA
 module_init(tspdrv_init);
 module_exit(tspdrv_exit);
+#endif

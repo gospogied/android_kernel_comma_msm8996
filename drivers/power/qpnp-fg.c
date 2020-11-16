@@ -3234,6 +3234,16 @@ static bool is_oneplus_batt_available(struct fg_chip *chip)
 
 	return true;
 }
+static bool is_gemini_batt_available(struct fg_chip *chip)
+{
+	if (!chip->bq_psy)
+		chip->bq_psy = power_supply_get_by_name("smb1351");
+	
+	if (!chip->bq_psy)
+		return false;
+	
+	return true;
+}
 
 static int fg_get_oneplus_prop(struct fg_chip *chip,
 	enum power_supply_property psp, union power_supply_propval *val)
@@ -3254,6 +3264,26 @@ static int fg_get_oneplus_prop(struct fg_chip *chip,
 
 	return 0;
 }
+
+static int fg_get_gemini_prop(struct fg_chip *chip,
+	 enum power_supply_property psp, union power_supply_propval *val)
+{
+	if (!is_gemini_batt_available(chip))
+		return -ENODEV;
+	
+	switch (psp) {
+		case POWER_SUPPLY_PROP_CAPACITY:
+		case POWER_SUPPLY_PROP_CURRENT_NOW:
+		case POWER_SUPPLY_PROP_VOLTAGE_NOW:
+		case POWER_SUPPLY_PROP_TEMP:
+			chip->bq_psy->get_property(chip->bq_psy, psp, val);
+			break;
+		default:
+			return -EINVAL;
+	}
+
+	return 0;
+}
 #endif
 
 static int fg_power_get_property(struct power_supply *psy,
@@ -3264,8 +3294,12 @@ static int fg_power_get_property(struct power_supply *psy,
 	bool vbatt_low_sts;
 
 #ifdef CONFIG_MACH_COMMA
-	if (comma_board_id() == COMMA_BOARD_GEMINI) {
+	if (comma_board_id() == COMMA_BOARD_ONEPLUS) {
 		if (!fg_get_oneplus_prop(chip, psp, val))
+			return 0;
+	}
+	if (comma_board_id() == COMMA_BOARD_GEMINI) {
+		if (!fg_get_gemini_prop(chip, psp, val))
 			return 0;
 	}
 #endif

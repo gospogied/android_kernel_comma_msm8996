@@ -187,7 +187,12 @@ dtb-y := msm8996pro-pmi8996-comma-leeco.dtb \
 	msm8996-v3-pmi8996-comma-leeco.dtb \
 	msm8996pro-pmi8996-comma-oneplus.dtb \
 	msm8996-v3-pmi8996-comma-oneplus.dtb \
-	apq8096-v3-pmi8996-comma-cici.dtb
+	apq8096-v3-pmi8996-comma-cici.dtb \
+	a1-msm8996-v2-pmi8994-mtp.dtb \
+	a1-msm8996-v3-pmi8994-mtp.dtb \
+	a1-msm8996-v3.0-pmi8994-mtp.dtb \
+	a2-msm8996-v3-pmi8994-mtp.dtb \
+	a2-msm8996-v3.0-pmi8994-mtp.dtb
 endif
 
 ifeq ($(CONFIG_ARM64),y)

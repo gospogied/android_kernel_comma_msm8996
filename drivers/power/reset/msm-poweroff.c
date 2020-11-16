@@ -276,7 +276,7 @@ static void msm_restart_prepare(const char *cmd)
 	}
 #ifdef CONFIG_MACH_COMMA
 	if (in_panic) {
-		if (comma_board_id() == COMMA_BOARD_GEMINI)
+		if ((comma_board_id() == COMMA_BOARD_ONEPLUS) || (comma_board_id() == COMMA_BOARD_GEMINI))
 			qpnp_pon_set_restart_reason(PON_RESTART_REASON_REBOOT);
 		__raw_writel(0x77665501, restart_reason);
 	} else
@@ -315,7 +315,7 @@ static void msm_restart_prepare(const char *cmd)
 					     restart_reason);
 		} else {
 #ifdef CONFIG_MACH_COMMA
-			if (comma_board_id() == COMMA_BOARD_GEMINI)
+			if ((comma_board_id() == COMMA_BOARD_ONEPLUS) || (comma_board_id() == COMMA_BOARD_GEMINI))
 				qpnp_pon_set_restart_reason(PON_RESTART_REASON_REBOOT);
 #endif
 			__raw_writel(0x77665501, restart_reason);

@@ -1098,7 +1098,7 @@ static void msm8996_mi2s_snd_shutdown_tert(struct snd_pcm_substream *substream,
 		 substream->stream, port_id);
 
 #ifdef CONFIG_MACH_COMMA
-	if (comma_board_id() == COMMA_BOARD_GEMINI)
+	if ((comma_board_id() == COMMA_BOARD_ONEPLUS) || (comma_board_id() == COMMA_BOARD_GEMINI))
 		tfa98xx_play_stop();
 #endif
 
@@ -4682,7 +4682,7 @@ static int msm8996_populate_dai_link_component_of_node(
 		}
 
 #ifdef CONFIG_MACH_COMMA
-		if (comma_board_id() == COMMA_BOARD_GEMINI &&
+if ((comma_board_id() == COMMA_BOARD_ONEPLUS || comma_board_id() == COMMA_BOARD_GEMINI) &&
 			!strcmp(dai_link[i].stream_name, "Quaternary MI2S Playback")) {
 			dai_link[i].codec_name = NULL;
 			dai_link[i].codec_dai_name = "tfa98xx_codec";
@@ -5021,7 +5021,7 @@ static int msm8996_asoc_machine_probe(struct platform_device *pdev)
 	int ret;
 
 #ifdef CONFIG_MACH_COMMA
-	if (comma_board_id() == COMMA_BOARD_GEMINI)
+	if ((comma_board_id() == COMMA_BOARD_ONEPLUS) || (comma_board_id() == COMMA_BOARD_GEMINI))
 		msm_quat_mi2s_rx_ch = 2;
 #endif
 

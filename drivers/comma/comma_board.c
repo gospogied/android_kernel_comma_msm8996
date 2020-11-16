@@ -40,6 +40,8 @@ static int __init comma_board_init(void)
 	else if (!strcmp(board_name, "leeco"))
 		board_id = COMMA_BOARD_LEECO;
 	else if (!strcmp(board_name, "oneplus"))
+		board_id = COMMA_BOARD_ONEPLUS;
+	else if (!strcmp(board_name, "gemini"))
 		board_id = COMMA_BOARD_GEMINI;
 
 	return 0;
